@@ -1,0 +1,71 @@
+trigger:
+  - main
+
+pool:
+  vmImage: macOS-11
+
+stages:
+- stage: AndroidStage
+  displayName: Android
+  jobs:
+
+  - job: AndroidJob
+    displayName: Android
+    steps: 
+
+    - task: DownloadSecureFile@1
+      name: keyprop
+      displayName: Download key properties file
+      inputs:
+        secureFile: 'key.properties'
+
+    - task: DownloadSecureFile@1
+      name: key
+      displayName: Download signing key
+      inputs:
+        secureFile: 'key.jks'
+
+    - task: Bash@3
+      displayName: Copy config files
+      inputs:
+        targetType: 'inline'
+        script: |
+          cp $(keyprop.secureFilePath) $(Build.SourcesDirectory)/android/key.properties
+          cp $(key.secureFilePath) $(Build.SourcesDirectory)/android/app/key.jks
+          
+          echo "key.properties copied to $(Build.SourcesDirectory)/android/key.properties"
+          echo "key.jks copied to $(Build.SourcesDirectory)/android/app/key.jks"
+
+    - task: FlutterInstall@0
+      displayName: "Install Flutter SDK"
+      inputs:
+        mode: 'auto'
+        channel: 'stable'
+        version: 'latest'
+
+    - task: FlutterBuild@0
+      displayName: "Build application"
+      inputs:
+        target: 'apk'
+        projectDirectory: '$(Build.SourcesDirectory)'
+
+    - task: FlutterTest@0
+      displayName: "Run unit tests"
+      inputs:
+        generateCodeCoverageReport: true
+        projectDirectory: '$(Build.SourcesDirectory)'
+
+    - task: CopyFiles@2
+      displayName: "Copy app to staging directory"
+      inputs:
+        sourceFolder: '$(Agent.BuildDirectory)'
+        contents: '**/*.apk'
+        targetFolder: '$(Build.StagingDirectory)'
+        flattenFolders: true
+
+    - task: PublishBuildArtifacts@1
+      displayName: "Publish APK file"
+      inputs:
+        pathtoPublish: '$(Build.ArtifactStagingDirectory)'
+        artifactName: 'APK'
+        publishLocation: 'Container'
